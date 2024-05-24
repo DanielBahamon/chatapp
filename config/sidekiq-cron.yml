@@ -1,0 +1,4 @@
+calculate_totals_cron_job:
+  cron: "0 * * * *" # Every hour
+  class: "CalculateTotalsCronJob"
+  queue: default

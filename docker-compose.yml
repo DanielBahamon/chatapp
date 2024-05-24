@@ -1,0 +1,78 @@
+services:
+  redis:
+    image: 'redis:7-alpine'
+    command: redis-server
+    ports:
+      - '6378:6379'
+    volumes:
+      - 'redis:/data'
+    networks:
+      - backend
+  db:
+    image: mysql:8.3
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USERNAME}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - '3307:3306'
+    networks:
+      - backend
+  elasticsearch:
+    image: elasticsearch:8.13.0
+    environment:
+      discovery.type: single-node
+      xpack.security.http.ssl.enabled: false
+      xpack.security.enabled: false
+    ports:
+      - '9201:9200'
+    networks:
+      - backend
+    depends_on:
+      - db
+  sidekiq:
+    depends_on:
+      - db
+      - redis
+      - elasticsearch
+    build: .
+    command: bundle exec sidekiq
+    volumes:
+      - '.:/rails'
+      - '/project/tmp' # don't mount tmp directory
+    environment:
+      REDIS_URL_SIDEKIQ: ${REDIS_URL_SIDEKIQ}
+      DEVISE_JWT_SECRET_KEY: ${DEVISE_JWT_SECRET_KEY}
+    networks:
+      - backend
+  app:
+    build:
+      context: .
+    ports:
+      - '3000:3000'
+    volumes:
+      - .:/rails
+    networks:
+      - backend
+    depends_on:
+      - db
+      - redis
+      - elasticsearch
+      - sidekiq
+    environment:
+      DB_NAME: ${DB_NAME}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_HOST: ${DB_HOST}
+      REDIS_URL_SIDEKIQ: ${REDIS_URL_SIDEKIQ}
+      DEVISE_JWT_SECRET_KEY: ${DEVISE_JWT_SECRET_KEY}
+      ELASTICSEARCH_URL: ${ELASTICSEARCH_URL}
+    restart: on-failure
+volumes:
+  redis:
+  mysql:
+
+networks:
+  backend:
+    name: backend
