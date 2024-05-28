@@ -1,28 +1,24 @@
 class MessagesController < ApplicationController
   before_action :authenticate_user!
   before_action :set_chat_and_application
-  before_action :set_message, only: %i[ show update destroy ]
+  before_action :set_message, only: %i[show update destroy]
+
+  rescue_from ActiveRecord::RecordNotFound, with: :record_not_found
 
   # GET /applications/:application_token/chats/:chat_number/messages
   def index
-    @messages = Message.where(chat_id: @chat.id).order(number: :desc)
+    @messages = @chat.messages.order(number: :desc)
+    message = @messages.empty? ? 'No messages found' : 'Messages found'
 
-    if @messages.empty?
-      render json: { message: 'No messages found' }, status: :ok
-    else
-      render json: { data: @messages, message: 'Messages found' }, status: :ok
-    end
+    render json: { data: @messages, message: message }, status: :ok
   end
 
   # GET /applications/:application_token/chats/:chat_number/messages/search?q=foo
   def search
     @messages = Message.search(params[:q])
+    message = @messages.empty? ? 'No messages found' : 'Messages found'
 
-    if @messages.empty?
-      render json: { message: 'No messages found' }, status: :ok
-    else
-      render json: { data: @messages, message: 'Messages found' }, status: :ok
-    end
+    render json: { data: @messages, message: message }, status: :ok
   end
 
   # GET /applications/:application_token/chats/:chat_number/messages/:number
@@ -33,55 +29,44 @@ class MessagesController < ApplicationController
   # PATCH/PUT /applications/:application_token/chats/:chat_number/messages/:number
   def update
     if @message.update(update_message_params)
-      render json: { data: @message, message: "Message updated" }, status: :ok
+      render json: { data: @message, message: 'Message updated' }, status: :ok
     else
-      render json: @message.errors, status: :unprocessable_entity
+      render json: { errors: @message.errors.full_messages }, status: :unprocessable_entity
     end
   end
 
   # DELETE /applications/:application_token/chats/:chat_number/messages/:number
   def destroy
-    if current_user.nil?
-      return render json: { message: "You must be logged in to delete a message" }, status: :unauthorized
-    end
+    return render json: { message: 'You must be logged in to delete a message' }, status: :unauthorized if current_user.nil?
 
-    user = User.find_by(username: current_user.username)
-
-    if user.id != @message.user_id
-      return render json: { message: "You can only delete your own messages" }, status: :unauthorized
+    if current_user.id != @message.user_id
+      render json: { message: 'You can only delete your own messages' }, status: :unauthorized
     else
       @message.destroy!
-      render json: { message: "Message deleted" }, status: :ok
+      render json: { message: 'Message deleted' }, status: :ok
     end
   end
 
   private
-    # Use callbacks to share common setup or constraints between actions.
-    def set_message
-      @message = Message.find_by(chat_id: @chat.id, number: params[:number])
 
-      if @message.nil?
-        return render json: { message: "Message not found" }, status: :not_found
-      end
-    end
+  def set_message
+    @message = @chat.messages.find_by!(number: params[:number])
+  end
 
-    def set_chat_and_application
-      @application = Application.find_by(token: params[:application_token])
-      if @application.nil?
-        return render json: { message: "Application not found" }, status: :not_found
-      end
-      @chat = Chat.find_by(application_id: @application.id, number: params[:chat_number])
-      if @chat.nil?
-        return render json: { message: "Chat not found" }, status: :not_found
-      end
-    end
+  def set_chat_and_application
+    @application = Application.find_by!(token: params[:application_token])
+    @chat = @application.chats.find_by!(number: params[:chat_number])
+  end
 
-    # Only allow a list of trusted parameters through.
-    def create_message_params
-      params.require(:message).permit(:body, :username)
-    end
+  def create_message_params
+    params.require(:message).permit(:body, :username)
+  end
 
-    def update_message_params
-      params.require(:message).permit(:body)
-    end
+  def update_message_params
+    params.require(:message).permit(:body)
+  end
+
+  def record_not_found(error)
+    render json: { message: error.message }, status: :not_found
+  end
 end

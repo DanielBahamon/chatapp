@@ -1,64 +1,58 @@
 class UsersController < ApplicationController
-  before_action :set_user, only: %i[ show update destroy ]
+  before_action :set_user, only: %i[show update destroy]
+
+  rescue_from ActiveRecord::RecordNotFound, with: :record_not_found
+  rescue_from ActiveRecord::RecordInvalid, with: :record_invalid
 
   # GET /users
   def index
     @users = User.all
+    message = @users.empty? ? 'No users found' : 'Users found'
 
-    if @users.empty?
-      render json: { error: 'No users found' }, status: :ok
-    else
-      render json: { data: @users, message: 'Users found' }, status: :ok
-    end
+    render json: { data: @users, message: message }, status: :ok
   end
 
-  # GET /users/username
+  # GET /users/:username
   def show
-    if @user.nil?
-      render json: { error: 'User not found' }, status: :not_found
-    else
-      render json: @user
-    end
+    render json: { data: @user, message: 'User found' }, status: :ok
   end
 
   # POST /users
   def create
     @user = User.create!(user_params)
-
-    if @user.save
-      render json: { data: @user, message: "User created" }, status: :created, location: @user
-    else
-      render json: @user.errors, status: :unprocessable_entity
-    end
+    render json: { data: @user, message: 'User created' }, status: :created, location: @user
   end
 
-  # PATCH/PUT /users/username
+  # PATCH/PUT /users/:username
   def update
     if @user.update(user_params)
-      render json: @user
+      render json: { data: @user, message: 'User updated' }, status: :ok
     else
-      render json: @user.errors, status: :unprocessable_entity
+      render json: { errors: @user.errors.full_messages }, status: :unprocessable_entity
     end
   end
 
-  # DELETE /users/username
+  # DELETE /users/:username
   def destroy
-    if @user
-      @user.destroy!
-      render json: { message: 'User deleted' }, status: :ok
-    else
-      render json: { error: 'User not found' }, status: :not_found
-    end
+    @user.destroy!
+    render json: { message: 'User deleted' }, status: :ok
   end
 
   private
-    # Use callbacks to share common setup or constraints between actions.
-    def set_user
-      @user = User.find_by(username: params[:username])
-    end
 
-    # Only allow a list of trusted parameters through.
-    def user_params
-      params.permit(:username, :email, :password)
-    end
+  def set_user
+    @user = User.find_by!(username: params[:username])
+  end
+
+  def user_params
+    params.permit(:username, :email, :password)
+  end
+
+  def record_not_found(error)
+    render json: { message: error.message }, status: :not_found
+  end
+
+  def record_invalid(error)
+    render json: { errors: error.record.errors.full_messages }, status: :unprocessable_entity
+  end
 end
